@@ -11,8 +11,25 @@ import com.sun.net.httpserver.HttpExchange;
 public final class Server {
   private final HttpServer server;
 
+  static interface Response {
+    public int getCode();
+    public byte[] getBytes();
+  }
+
+  static class StringResponse implements Response {
+    private final int code;
+    private final String msg;
+    public StringResponse(final int code, final String msg) {
+      this.code = code;
+      this.msg = msg;
+    }
+
+    public int getCode() { return this.code; }
+    public byte[] getBytes() { return this.msg.getBytes(); }
+  }
+
   static interface Processor {
-    public String process();
+    public Response process();
   }
 
   static class Handler {
@@ -33,7 +50,8 @@ public final class Server {
           try(final var os = exchange.getResponseBody()) {
             final var response =  handler.processor.process();
             final var bytes = response.getBytes();
-            exchange.sendResponseHeaders(200, bytes.length);
+            final var code = response.getCode();
+            exchange.sendResponseHeaders(code, bytes.length);
             os.write(bytes);
             os.close();
           } catch (IOException ioe) {
@@ -61,7 +79,7 @@ public final class Server {
     var server = Server.builder()
       .port(9000)
       .backlog(5)
-      .handle(new Handler("/", () -> { return "hello"; }))
+      .handle(new Handler("/", () -> { return new StringResponse(200, "hello"); }))
       .build();
     server.start();
   }
