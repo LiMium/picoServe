@@ -58,9 +58,6 @@ public final class Server {
 
   public static void main(String[] args) throws java.io.IOException {
     System.out.println("Starting");
-    /*var server = new Server(new InetSocketAddress(9000), 5, List.of(
-      new Handler("/", () -> { return "hello"; })
-    ));*/
     var server = Server.builder()
       .port(9000)
       .backlog(5)
