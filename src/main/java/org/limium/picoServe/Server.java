@@ -63,15 +63,26 @@ public final class Server {
   }
 
   static interface Processor {
+    public Response process(final String method, final Map<String, List<String>> params);
+  }
+
+  static interface SimpleProcessor {
     public Response process(final Map<String, List<String>> params);
   }
 
   static class Handler {
     public final String path;
     public final Processor processor;
+    public final String[] methods;
     public Handler(final String path, final Processor processor) {
       this.path = path;
       this.processor = processor;
+      this.methods = new String[] {};
+    }
+    public Handler(final String path, final String methods, final Processor processor) {
+      this.path = path;
+      this.processor = processor;
+      this.methods = methods.split(",");
     }
   }
 
@@ -79,18 +90,24 @@ public final class Server {
     this.server = HttpServer.create(addr, backlog);
     this.server.setExecutor(executor);
     for (final var handler: handlers) {
-      System.out.println("Registering handler for " + handler.path);
+      // System.out.println("Registering handler for " + handler.path);
       this.server.createContext(handler.path, new HttpHandler() {
         public void handle(final HttpExchange exchange) {
+          final var method = exchange.getRequestMethod();
+          final Response errorResponse = checkMethods(handler.methods, method);
           try(final var os = exchange.getResponseBody()) {
             Response response;
-            try {
-              final var query = exchange.getRequestURI().getQuery();
-              final var params = parseParams(query);
-              response = handler.processor.process(params);
-            } catch (final Exception e) {
-              e.printStackTrace();
-              response = new StringResponse(500, "Error: " + e);
+            if (errorResponse != null) {
+              response = errorResponse;
+            } else {
+              try {
+                final var query = exchange.getRequestURI().getQuery();
+                final var params = parseParams(query);
+                response = handler.processor.process(method, params);
+              } catch (final Exception e) {
+                e.printStackTrace();
+                response = new StringResponse(500, "Error: " + e);
+              }
             }
             final var headersToSend = response.getResponseHeaders();
             if (headersToSend != null) {
@@ -108,6 +125,22 @@ public final class Server {
         }
       });
     }
+  }
+
+  public static Response checkMethods(final String[] methods, final String method) {
+    if (methods.length > 0) {
+      var found = false;
+      for (var m: methods) {
+        if (m.equals(method)) {
+          found = true;
+          break;
+        }
+      }
+      if (!found) {
+        return new StringResponse(404, "Method Not Accepted");
+      }
+    }
+    return null;
   }
 
   public void start() {
@@ -163,6 +196,26 @@ public final class Server {
     }
     public ServerBuilder handle(final Handler handler) {
       handlers.add(handler);
+      return this;
+    }
+    public ServerBuilder GET(final String path, final SimpleProcessor processor) {
+      handlers.add(new Handler(path, "GET", (method, params) -> processor.process(params)));
+      return this;
+    }
+    public ServerBuilder POST(final String path, final SimpleProcessor processor) {
+      handlers.add(new Handler(path, "POST", (method, params) -> processor.process(params)));
+      return this;
+    }
+    public ServerBuilder PUT(final String path, final SimpleProcessor processor) {
+      handlers.add(new Handler(path, "PUT", (method, params) -> processor.process(params)));
+      return this;
+    }
+    public ServerBuilder DELETE(final String path, final SimpleProcessor processor) {
+      handlers.add(new Handler(path, "DELETE", (method, params) -> processor.process(params)));
+      return this;
+    }
+    public ServerBuilder HEAD(final String path, final SimpleProcessor processor) {
+      handlers.add(new Handler(path, "HEAD", (method, params) -> processor.process(params)));
       return this;
     }
     public ServerBuilder executor(final Executor executor) {
