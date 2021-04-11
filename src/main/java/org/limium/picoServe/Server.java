@@ -9,6 +9,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.LinkedList;
 import java.util.concurrent.Executor;
+import java.util.regex.Pattern;
+import java.util.Arrays;
+import java.util.Optional;
+import java.util.stream.Collectors;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 import com.sun.net.httpserver.HttpServer;
 import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpExchange;
@@ -57,7 +63,7 @@ public final class Server {
   }
 
   static interface Processor {
-    public Response process();
+    public Response process(final Map<String, List<String>> params);
   }
 
   static class Handler {
@@ -77,7 +83,15 @@ public final class Server {
       this.server.createContext(handler.path, new HttpHandler() {
         public void handle(final HttpExchange exchange) {
           try(final var os = exchange.getResponseBody()) {
-            final var response =  handler.processor.process();
+            Response response;
+            try {
+              final var query = exchange.getRequestURI().getQuery();
+              final var params = parseParams(query);
+              response = handler.processor.process(params);
+            } catch (final Exception e) {
+              e.printStackTrace();
+              response = new StringResponse(500, "Error: " + e);
+            }
             final var headersToSend = response.getResponseHeaders();
             if (headersToSend != null) {
               final var responseHeaders = exchange.getResponseHeaders();
@@ -119,16 +133,37 @@ public final class Server {
       .port(9000)
       .backlog(5)
       .executor(executor)
-      .handle(new Handler("/string", () -> {
-        return new StringResponse(200, "hello", Map.of("Content-type", List.of("text/plain")));
+      .handle(new Handler("/string", (params) -> {
+        return new StringResponse(200, "hello " + params, Map.of("Content-type", List.of("text/plain")));
       }))
-      .handle(new Handler("/stringWithDelay", () -> {
+      .handle(new Handler("/stringWithDelay", (params) -> {
         try { Thread.sleep(10); } catch (java.lang.InterruptedException e) { System.out.println("Interrupted");}
         return new StringResponse(200, "hello", Map.of("Content-type", List.of("text/plain")));
       }))
-      .handle(new Handler("/bytes", () -> { return new ByteResponse(200, new byte[] {0x11, 0x22, 0x33}); }))
+      .handle(new Handler("/bytes", (params) -> { return new ByteResponse(200, new byte[] {0x11, 0x22, 0x33}); }))
       .build();
     server.start();
+  }
+
+  // Adapted from https://stackoverflow.com/a/37368660
+  private final static Pattern ampersandPattern = Pattern.compile("&");
+  private final static Pattern equalPattern = Pattern.compile("=");
+  private final static Map<String, List<String>> emptyMap = Map.of();
+  private static Map<String, List<String>> parseParams(final String query) {
+    if (query == null) {
+      return emptyMap;
+    }
+    final var params = ampersandPattern
+      .splitAsStream(query)
+      .map(s -> Arrays.copyOf(equalPattern.split(s, 2), 2))
+      .collect(Collectors.groupingBy(s -> decode(s[0]), Collectors.mapping(s -> decode(s[1]), Collectors.toList())));
+    return params;
+  }
+
+  private static String decode(final String encoded) {
+    return Optional.ofNullable(encoded)
+                   .map(e -> URLDecoder.decode(e, StandardCharsets.UTF_8))
+                   .orElse(null);
   }
 
   public static class ServerBuilder {
