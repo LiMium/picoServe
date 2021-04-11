@@ -5,6 +5,7 @@ import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.LinkedList;
+import java.util.concurrent.Executor;
 import com.sun.net.httpserver.HttpServer;
 import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpExchange;
@@ -65,8 +66,9 @@ public final class Server {
     }
   }
 
-  public Server(InetSocketAddress addr, int backlog, List<Handler> handlers) throws IOException {
+  public Server(final InetSocketAddress addr, final int backlog, final List<Handler> handlers, final Executor executor) throws IOException {
     this.server = HttpServer.create(addr, backlog);
+    this.server.setExecutor(executor);
     for (final var handler: handlers) {
       System.out.println("Registering handler for " + handler.path);
       this.server.createContext(handler.path, new HttpHandler() {
@@ -120,6 +122,7 @@ public final class Server {
     private InetSocketAddress mAddress = new InetSocketAddress(9000);
     private int backlog = 5;
     private List<Handler> handlers = new LinkedList<Handler>();
+    private Executor executor = null;
 
     public ServerBuilder port(final int port) {
       mAddress = new InetSocketAddress(port);
@@ -137,8 +140,12 @@ public final class Server {
       handlers.add(handler);
       return this;
     }
+    public ServerBuilder executor(final Executor executor) {
+      this.executor = executor;
+      return this;
+    }
     public Server build() throws IOException {
-      return new Server(mAddress, backlog, handlers);
+      return new Server(mAddress, backlog, handlers, executor);
     }
   }
 }
