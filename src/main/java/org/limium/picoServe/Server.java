@@ -1,3 +1,6 @@
+// Distributed under Apache 2 license
+// Copyright github.com/hrj
+
 package org.limium.picoserve;
 
 import java.net.InetSocketAddress;
