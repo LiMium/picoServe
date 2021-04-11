@@ -3,6 +3,7 @@ package org.limium.picoserve;
 import java.net.InetSocketAddress;
 import java.io.IOException;
 import java.util.List;
+import java.util.Map;
 import java.util.LinkedList;
 import com.sun.net.httpserver.HttpServer;
 import com.sun.net.httpserver.HttpHandler;
@@ -14,30 +15,41 @@ public final class Server {
   static interface Response {
     public int getCode();
     public byte[] getBytes();
-  }
-
-  static class StringResponse implements Response {
-    private final int code;
-    private final String msg;
-    public StringResponse(final int code, final String msg) {
-      this.code = code;
-      this.msg = msg;
-    }
-
-    public int getCode() { return this.code; }
-    public byte[] getBytes() { return this.msg.getBytes(); }
+    public Map<String, List<String>> getResponseHeaders();
   }
 
   static class ByteResponse implements Response {
     private final int code;
-    private final byte[] msg;
-    public ByteResponse(final int code, final byte[] msg) {
+    private final byte[] bytes;
+    private final Map<String, List<String>> responseHeaders;
+
+    public ByteResponse(final int code, final byte[] bytes) {
       this.code = code;
-      this.msg = msg;
+      this.bytes = bytes;
+      this.responseHeaders = null;
+    }
+
+    public ByteResponse(final int code, final byte[] bytes, final Map<String, List<String>> responseHeaders) {
+      this.code = code;
+      this.bytes = bytes;
+      this.responseHeaders = responseHeaders;
     }
 
     public int getCode() { return this.code; }
-    public byte[] getBytes() { return this.msg; }
+    public byte[] getBytes() { return this.bytes; }
+    public Map<String, List<String>> getResponseHeaders() {
+      return this.responseHeaders;
+    }
+  }
+
+  static class StringResponse extends ByteResponse {
+    public StringResponse(final int code, final String msg) {
+      super(code, msg.getBytes());
+    }
+
+    public StringResponse(final int code, final String msg, final Map<String, List<String>> responseHeaders) {
+      super(code, msg.getBytes(), responseHeaders);
+    }
   }
 
   static interface Processor {
@@ -56,11 +68,16 @@ public final class Server {
   public Server(InetSocketAddress addr, int backlog, List<Handler> handlers) throws IOException {
     this.server = HttpServer.create(addr, backlog);
     for (final var handler: handlers) {
-      System.out.println("Registering handler");
+      System.out.println("Registering handler for " + handler.path);
       this.server.createContext(handler.path, new HttpHandler() {
         public void handle(final HttpExchange exchange) {
           try(final var os = exchange.getResponseBody()) {
             final var response =  handler.processor.process();
+            final var headersToSend = response.getResponseHeaders();
+            if (headersToSend != null) {
+              final var responseHeaders = exchange.getResponseHeaders();
+              responseHeaders.putAll(headersToSend);
+            }
             final var bytes = response.getBytes();
             final var code = response.getCode();
             exchange.sendResponseHeaders(code, bytes.length);
@@ -91,7 +108,9 @@ public final class Server {
     var server = Server.builder()
       .port(9000)
       .backlog(5)
-      .handle(new Handler("/string", () -> { return new StringResponse(200, "hello"); }))
+      .handle(new Handler("/string", () -> {
+        return new StringResponse(200, "hello", Map.of("Content-type", List.of("text/plain")));
+      }))
       .handle(new Handler("/bytes", () -> { return new ByteResponse(200, new byte[] {0x11, 0x22, 0x33}); }))
       .build();
     server.start();
