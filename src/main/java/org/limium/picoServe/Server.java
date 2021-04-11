@@ -28,6 +28,18 @@ public final class Server {
     public byte[] getBytes() { return this.msg.getBytes(); }
   }
 
+  static class ByteResponse implements Response {
+    private final int code;
+    private final byte[] msg;
+    public ByteResponse(final int code, final byte[] msg) {
+      this.code = code;
+      this.msg = msg;
+    }
+
+    public int getCode() { return this.code; }
+    public byte[] getBytes() { return this.msg; }
+  }
+
   static interface Processor {
     public Response process();
   }
@@ -79,7 +91,8 @@ public final class Server {
     var server = Server.builder()
       .port(9000)
       .backlog(5)
-      .handle(new Handler("/", () -> { return new StringResponse(200, "hello"); }))
+      .handle(new Handler("/string", () -> { return new StringResponse(200, "hello"); }))
+      .handle(new Handler("/bytes", () -> { return new ByteResponse(200, new byte[] {0x11, 0x22, 0x33}); }))
       .build();
     server.start();
   }
