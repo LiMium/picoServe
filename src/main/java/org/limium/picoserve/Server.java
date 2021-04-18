@@ -22,13 +22,13 @@ import com.sun.net.httpserver.HttpExchange;
 public final class Server {
   private final HttpServer server;
 
-  static interface Response {
+  public static interface Response {
     public int getCode();
     public byte[] getBytes();
     public Map<String, List<String>> getResponseHeaders();
   }
 
-  static class ByteResponse implements Response {
+  public static class ByteResponse implements Response {
     private final int code;
     private final byte[] bytes;
     private final Map<String, List<String>> responseHeaders;
@@ -52,7 +52,7 @@ public final class Server {
     }
   }
 
-  static class StringResponse extends ByteResponse {
+  public static class StringResponse extends ByteResponse {
     public StringResponse(final int code, final String msg) {
       super(code, msg.getBytes());
     }
@@ -62,15 +62,39 @@ public final class Server {
     }
   }
 
-  static interface Processor {
-    public Response process(final String method, final Map<String, List<String>> params);
+  public final class Request {
+    final HttpExchange exchange;
+    Request(final HttpExchange exchange) {
+      this.exchange = exchange;
+    }
+    public String getMethod() {
+      return exchange.getRequestMethod();
+    }
+    public Map<String, List<String>> getQueryParams() {
+      final var query = exchange.getRequestURI().getQuery();
+      final var params = parseParams(query);
+      return params;
+    }
+    public byte[] getBody() {
+      try(final var bodyIS = exchange.getRequestBody()) {
+        final var bytes = bodyIS.readAllBytes();
+        bodyIS.close();
+        return bytes;
+      } catch (IOException ioe) {
+        return null;
+      }
+    }
+    public String getBodyString() {
+      return new String(getBody());
+    }
   }
 
-  static interface SimpleProcessor {
-    public Response process(final Map<String, List<String>> params);
+  @FunctionalInterface
+  public static interface Processor {
+    public Response process(final Request request);
   }
 
-  static class Handler {
+  public static class Handler {
     public final String path;
     public final Processor processor;
     public final String[] methods;
@@ -101,9 +125,7 @@ public final class Server {
               response = errorResponse;
             } else {
               try {
-                final var query = exchange.getRequestURI().getQuery();
-                final var params = parseParams(query);
-                response = handler.processor.process(method, params);
+                response = handler.processor.process(new Request(exchange));
               } catch (final Exception e) {
                 e.printStackTrace();
                 response = new StringResponse(500, "Error: " + e);
@@ -198,24 +220,24 @@ public final class Server {
       handlers.add(handler);
       return this;
     }
-    public ServerBuilder GET(final String path, final SimpleProcessor processor) {
-      handlers.add(new Handler(path, "GET", (method, params) -> processor.process(params)));
+    public ServerBuilder GET(final String path, final Processor processor) {
+      handlers.add(new Handler(path, "GET", request -> processor.process(request)));
       return this;
     }
-    public ServerBuilder POST(final String path, final SimpleProcessor processor) {
-      handlers.add(new Handler(path, "POST", (method, params) -> processor.process(params)));
+    public ServerBuilder POST(final String path, final Processor processor) {
+      handlers.add(new Handler(path, "POST", request -> processor.process(request)));
       return this;
     }
-    public ServerBuilder PUT(final String path, final SimpleProcessor processor) {
-      handlers.add(new Handler(path, "PUT", (method, params) -> processor.process(params)));
+    public ServerBuilder PUT(final String path, final Processor processor) {
+      handlers.add(new Handler(path, "PUT", request -> processor.process(request)));
       return this;
     }
-    public ServerBuilder DELETE(final String path, final SimpleProcessor processor) {
-      handlers.add(new Handler(path, "DELETE", (method, params) -> processor.process(params)));
+    public ServerBuilder DELETE(final String path, final Processor processor) {
+      handlers.add(new Handler(path, "DELETE", request -> processor.process(request)));
       return this;
     }
-    public ServerBuilder HEAD(final String path, final SimpleProcessor processor) {
-      handlers.add(new Handler(path, "HEAD", (method, params) -> processor.process(params)));
+    public ServerBuilder HEAD(final String path, final Processor processor) {
+      handlers.add(new Handler(path, "HEAD", request -> processor.process(request)));
       return this;
     }
     public ServerBuilder executor(final Executor executor) {

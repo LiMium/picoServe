@@ -19,14 +19,14 @@ public final class Example {
       .port(9000)
       .backlog(5)
       .executor(executor)
-      .GET("/string", (params) -> {
-        return new StringResponse(200, "hello " + params, Map.of("Content-type", List.of("text/plain")));
+      .GET("/string", (request) -> {
+        return new StringResponse(200, "hello " + request.getQueryParams(), Map.of("Content-type", List.of("text/plain")));
       })
-      .handle(new Handler("/stringWithDelay", (method, params) -> {
+      .handle(new Handler("/stringWithDelay", (request) -> {
         try { Thread.sleep(10); } catch (java.lang.InterruptedException e) { System.out.println("Interrupted");}
         return new StringResponse(200, "hello", Map.of("Content-type", List.of("text/plain")));
       }))
-      .handle(new Handler("/bytes", (method, params) -> { return new ByteResponse(200, new byte[] {0x11, 0x22, 0x33}); }))
+      .handle(new Handler("/bytes", (request) -> { return new ByteResponse(200, new byte[] {0x11, 0x22, 0x33}); }))
       .build();
     server.start();
   }
