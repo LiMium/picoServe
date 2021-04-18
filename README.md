@@ -12,14 +12,14 @@
 ## Quick start
 
 ```java
-    Server.builder()
-      .port(9000)
-      .backlog(5)
-      .GET("/string", request -> {
-        return new StringResponse(200, "hello " + request.getQueryParams());
-      })
-      .build()
-      .start();
+  Server.builder()
+    .port(9000)
+    .backlog(5)
+    .GET("/string", request -> {
+      return new StringResponse(200, "hello " + request.getQueryParams());
+    })
+    .build()
+    .start();
 ```
 
 ## Example
